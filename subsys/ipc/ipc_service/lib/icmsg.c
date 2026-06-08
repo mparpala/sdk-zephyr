@@ -54,10 +54,21 @@ __weak void icmsg_simple_trace(uint8_t channel_id, uint8_t code)
 	ARG_UNUSED(code);
 }
 
+__weak void icmsg_simple_trace_hs_skip(uint8_t channel_id, uint16_t remote_sid_req,
+				       uint16_t remote_sid)
+{
+	ARG_UNUSED(channel_id);
+	ARG_UNUSED(remote_sid_req);
+	ARG_UNUSED(remote_sid);
+}
+
 #define ICMSG_TRACE(dd, c) \
 	icmsg_simple_trace((uint8_t)(uintptr_t)(dd)->ctx, (uint8_t)(c))
+#define ICMSG_TRACE_HS_SKIP(dd, req, sid) \
+	icmsg_simple_trace_hs_skip((uint8_t)(uintptr_t)(dd)->ctx, (req), (sid))
 #else
 #define ICMSG_TRACE(dd, c) ((void)0)
+#define ICMSG_TRACE_HS_SKIP(dd, req, sid) ((void)0)
 #endif
 
 static const uint8_t magic[] = {0x45, 0x6d, 0x31, 0x6c, 0x31, 0x4b,
@@ -216,6 +227,8 @@ static bool callback_process(struct icmsg_data_t *dev_data)
 		uint32_t tx_handshake = pbuf_handshake_read(dev_data->tx_pb);
 		uint32_t remote_sid_req = REMOTE_SID_REQ_FROM_TX(tx_handshake);
 		uint32_t local_sid_ack = LOCAL_SID_ACK_FROM_TX(tx_handshake);
+
+		ICMSG_TRACE_HS_SKIP(dev_data, (uint16_t)remote_sid_req, dev_data->remote_sid);
 
 		if (remote_sid_req != dev_data->remote_sid && remote_sid_req != SID_DISCONNECTED) {
 			/* We can now initialize TX, since we know that remote, during receiving,
