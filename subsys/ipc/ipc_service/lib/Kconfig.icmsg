@@ -87,6 +87,13 @@ config IPC_SERVICE_ICMSG_UNBOUND_DETECT_ALLOWED
 	  can set this option to "n", if you want to reduce code size and
 	  all instances of ICMsg are using unbound detection functionality.
 
+config IPC_SERVICE_ICMSG_SIMPLE_TRACE
+	bool "icmsg simple trace hook"
+	depends on IPC_SERVICE_ICMSG
+	default n
+	help
+	  Call weak icmsg_simple_trace() at icmsg lifecycle milestones.
+
 # The Icmsg library in its simplicity requires the system workqueue to execute
 # at a cooperative priority.
 config SYSTEM_WORKQUEUE_PRIORITY

@@ -47,6 +47,19 @@
 
 #define SHMEM_ACCESS_TO		K_MSEC(CONFIG_IPC_SERVICE_ICMSG_SHMEM_ACCESS_TO_MS)
 
+#ifdef CONFIG_IPC_SERVICE_ICMSG_SIMPLE_TRACE
+__weak void icmsg_simple_trace(uint8_t channel_id, uint8_t code)
+{
+	ARG_UNUSED(channel_id);
+	ARG_UNUSED(code);
+}
+
+#define ICMSG_TRACE(dd, c) \
+	icmsg_simple_trace((uint8_t)(uintptr_t)(dd)->ctx, (uint8_t)(c))
+#else
+#define ICMSG_TRACE(dd, c) ((void)0)
+#endif
+
 static const uint8_t magic[] = {0x45, 0x6d, 0x31, 0x6c, 0x31, 0x4b,
 				0x30, 0x72, 0x6e, 0x33, 0x6c, 0x69, 0x34};
 
@@ -188,6 +201,7 @@ static bool callback_process(struct icmsg_data_t *dev_data)
 			notify_remote = true;
 			rerun = true;
 			atomic_set(&dev_data->state, ICMSG_STATE_INITIALIZING_SID_DISABLED);
+			ICMSG_TRACE(dev_data, 0xE6);
 			break;
 		}
 		/* If remote did not initialize the RX in session-unaware mode, we can try
@@ -225,6 +239,7 @@ static bool callback_process(struct icmsg_data_t *dev_data)
 			pbuf_handshake_write(dev_data->rx_pb,
 				MAKE_RX_HANDSHAKE(dev_data->local_sid, dev_data->remote_sid));
 			notify_remote = true;
+			ICMSG_TRACE(dev_data, 0xE7);
 		}
 
 		if (local_sid_ack == dev_data->local_sid &&
@@ -234,6 +249,7 @@ static bool callback_process(struct icmsg_data_t *dev_data)
 			 */
 			atomic_set(&dev_data->state, ICMSG_STATE_CONNECTED_SID_ENABLED);
 
+			ICMSG_TRACE(dev_data, 0xE8);
 			if (dev_data->cb->bound) {
 				dev_data->cb->bound(dev_data->ctx);
 			}
@@ -272,6 +288,7 @@ static bool callback_process(struct icmsg_data_t *dev_data)
 
 			if (remote_sid_req != dev_data->remote_sid) {
 				atomic_set(&dev_data->state, ICMSG_STATE_DISCONNECTED);
+				ICMSG_TRACE(dev_data, 0xEA);
 				if (dev_data->cb->unbound) {
 					dev_data->cb->unbound(dev_data->ctx);
 				}
@@ -308,6 +325,7 @@ static bool callback_process(struct icmsg_data_t *dev_data)
 
 			atomic_set(&dev_data->state, ICMSG_STATE_CONNECTED_SID_DISABLED);
 
+			ICMSG_TRACE(dev_data, 0xE9);
 			if (dev_data->cb->bound) {
 				dev_data->cb->bound(dev_data->ctx);
 			}
@@ -350,6 +368,8 @@ static void mbox_callback(const struct device *instance, uint32_t channel,
 {
 	bool rerun;
 	struct icmsg_data_t *dev_data = user_data;
+
+	ICMSG_TRACE(dev_data, 0xE5);
 
 #ifdef CONFIG_MULTITHREADING
 	ARG_UNUSED(rerun);
@@ -397,6 +417,7 @@ int icmsg_open(const struct icmsg_config_t *conf,
 		if (!atomic_cas(&dev_data->state, ICMSG_STATE_OFF,
 				ICMSG_STATE_INITIALIZING_SID_DISABLED)) {
 			/* Already opened. */
+			ICMSG_TRACE(dev_data, 0xEB);
 			return -EALREADY;
 		}
 		old_state = ICMSG_STATE_OFF;
@@ -408,6 +429,8 @@ int icmsg_open(const struct icmsg_config_t *conf,
 	dev_data->cb = cb;
 	dev_data->ctx = ctx;
 	dev_data->cfg = conf;
+
+	ICMSG_TRACE(dev_data, 0xE0);
 
 #ifdef CONFIG_IPC_SERVICE_ICMSG_SHMEM_ACCESS_SYNC
 	k_mutex_init(&dev_data->tx_lock);
@@ -452,8 +475,10 @@ int icmsg_open(const struct icmsg_config_t *conf,
 		 */
 		ret = mbox_init(conf, dev_data);
 		if (ret) {
+			ICMSG_TRACE(dev_data, 0xE3);
 			goto cleanup_and_exit;
 		}
+		ICMSG_TRACE(dev_data, 0xE2);
 	}
 
 	/* We need to send a notification to remote, it may not be delivered
@@ -464,13 +489,16 @@ int icmsg_open(const struct icmsg_config_t *conf,
 	ret = mbox_send_dt(&conf->mbox_tx, NULL);
 
 	if (ret < 0) {
+		ICMSG_TRACE(dev_data, 0xEC);
 		__ASSERT(false, "Cannot send mbox notification");
 		goto cleanup_and_exit;
 	}
 
+	ICMSG_TRACE(dev_data, 0xE4);
 	return ret;
 
 cleanup_and_exit:
+	ICMSG_TRACE(dev_data, 0xE1);
 	atomic_set(&dev_data->state, ICMSG_STATE_OFF);
 	return ret;
 }
