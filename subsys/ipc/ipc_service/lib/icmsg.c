@@ -54,21 +54,55 @@ __weak void icmsg_simple_trace(uint8_t channel_id, uint8_t code)
 	ARG_UNUSED(code);
 }
 
-__weak void icmsg_simple_trace_hs_skip(uint8_t channel_id, uint16_t remote_sid_req,
-				       uint16_t remote_sid)
+__weak void icmsg_simple_trace_hs_skip(uint8_t channel_id, uint8_t state,
+				       uint16_t remote_sid_req, uint16_t remote_sid)
 {
 	ARG_UNUSED(channel_id);
+	ARG_UNUSED(state);
 	ARG_UNUSED(remote_sid_req);
 	ARG_UNUSED(remote_sid);
 }
 
+__weak void icmsg_simple_trace_cb_state(uint8_t channel_id, uint8_t state)
+{
+	ARG_UNUSED(channel_id);
+	ARG_UNUSED(state);
+}
+
+__weak void icmsg_simple_trace_open_done(uint8_t channel_id, uint8_t state,
+					 uint8_t old_state, uint16_t local_sid,
+					 uint16_t tx_req_at_open)
+{
+	ARG_UNUSED(channel_id);
+	ARG_UNUSED(state);
+	ARG_UNUSED(old_state);
+	ARG_UNUSED(local_sid);
+	ARG_UNUSED(tx_req_at_open);
+}
+
+__weak void icmsg_simple_trace_cb_dropped(uint8_t channel_id, uint8_t state)
+{
+	ARG_UNUSED(channel_id);
+	ARG_UNUSED(state);
+}
+
 #define ICMSG_TRACE(dd, c) \
 	icmsg_simple_trace((uint8_t)(uintptr_t)(dd)->ctx, (uint8_t)(c))
-#define ICMSG_TRACE_HS_SKIP(dd, req, sid) \
-	icmsg_simple_trace_hs_skip((uint8_t)(uintptr_t)(dd)->ctx, (req), (sid))
+#define ICMSG_TRACE_HS_SKIP(dd, st, req, sid) \
+	icmsg_simple_trace_hs_skip((uint8_t)(uintptr_t)(dd)->ctx, (st), (req), (sid))
+#define ICMSG_TRACE_CB_STATE(dd, st) \
+	icmsg_simple_trace_cb_state((uint8_t)(uintptr_t)(dd)->ctx, (st))
+#define ICMSG_TRACE_OPEN_DONE(dd, st, old, lsid, txreq) \
+	icmsg_simple_trace_open_done((uint8_t)(uintptr_t)(dd)->ctx, (st), (old), (lsid), \
+				     (txreq))
+#define ICMSG_TRACE_CB_DROPPED(dd, st) \
+	icmsg_simple_trace_cb_dropped((uint8_t)(uintptr_t)(dd)->ctx, (st))
 #else
 #define ICMSG_TRACE(dd, c) ((void)0)
-#define ICMSG_TRACE_HS_SKIP(dd, req, sid) ((void)0)
+#define ICMSG_TRACE_HS_SKIP(dd, st, req, sid) ((void)0)
+#define ICMSG_TRACE_CB_STATE(dd, st) ((void)0)
+#define ICMSG_TRACE_OPEN_DONE(dd, st, old, lsid, txreq) ((void)0)
+#define ICMSG_TRACE_CB_DROPPED(dd, st) ((void)0)
 #endif
 
 static const uint8_t magic[] = {0x45, 0x6d, 0x31, 0x6c, 0x31, 0x4b,
@@ -183,6 +217,8 @@ static bool callback_process(struct icmsg_data_t *dev_data)
 	bool notify_remote = false;
 	atomic_t state = atomic_get(&dev_data->state);
 
+	ICMSG_TRACE_CB_STATE(dev_data, (uint8_t)state);
+
 	switch (state) {
 
 #if UNBOUND_DETECT
@@ -228,7 +264,8 @@ static bool callback_process(struct icmsg_data_t *dev_data)
 		uint32_t remote_sid_req = REMOTE_SID_REQ_FROM_TX(tx_handshake);
 		uint32_t local_sid_ack = LOCAL_SID_ACK_FROM_TX(tx_handshake);
 
-		ICMSG_TRACE_HS_SKIP(dev_data, (uint16_t)remote_sid_req, dev_data->remote_sid);
+		ICMSG_TRACE_HS_SKIP(dev_data, (uint8_t)state, (uint16_t)remote_sid_req,
+				    dev_data->remote_sid);
 
 		if (remote_sid_req != dev_data->remote_sid && remote_sid_req != SID_DISCONNECTED) {
 			/* We can now initialize TX, since we know that remote, during receiving,
@@ -352,7 +389,7 @@ static bool callback_process(struct icmsg_data_t *dev_data)
 	case ICMSG_STATE_OFF:
 	case ICMSG_STATE_DISCONNECTED:
 	default:
-		/* Nothing to do in this state. */
+		ICMSG_TRACE_CB_DROPPED(dev_data, (uint8_t)state);
 		return false;
 	}
 
@@ -508,6 +545,10 @@ int icmsg_open(const struct icmsg_config_t *conf,
 	}
 
 	ICMSG_TRACE(dev_data, 0xE4);
+	ICMSG_TRACE_OPEN_DONE(dev_data, (uint8_t)atomic_get(&dev_data->state),
+			      (uint8_t)old_state, dev_data->local_sid,
+			      (uint16_t)REMOTE_SID_REQ_FROM_TX(
+				      pbuf_handshake_read(dev_data->tx_pb)));
 	return ret;
 
 cleanup_and_exit:
